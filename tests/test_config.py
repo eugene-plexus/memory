@@ -28,16 +28,17 @@ def test_patch_config_validates_per_field(client: TestClient) -> None:
     response = client.patch(
         "/v1/config",
         json={
-            "logLevel": "DEBUG",  # valid
-            "maxConversations": 500,  # valid
+            "maxConversations": 500,  # valid, hot-swappable
+            "maxMessagesPerConversation": 50,  # valid, hot-swappable
             "port": 70000,  # invalid: > 65535
         },
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body["applied"]) == {"logLevel", "maxConversations"}
+    assert set(body["applied"]) == {"maxConversations", "maxMessagesPerConversation"}
     rejected = {r["key"] for r in body["rejected"]}
     assert rejected == {"port"}
+    # Neither applied field requires restart, and the rejected one was never staged.
     assert body["requiresRestart"] is False
 
 

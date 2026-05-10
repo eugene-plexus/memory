@@ -54,11 +54,15 @@ FIELDS: list[ConfigField] = [
     ConfigField(
         key="logLevel",
         label="Log Level",
-        description="Logging verbosity.",
+        description=(
+            "Logging verbosity. Read by uvicorn at startup; restart required "
+            "for the new level to take effect."
+        ),
         category="logging",
         valueType=ConfigValueType.enum,
         default="INFO",
         enumValues=["DEBUG", "INFO", "WARNING", "ERROR"],
+        requiresRestart=True,
     ),
     ConfigField(
         key="maxConversations",
