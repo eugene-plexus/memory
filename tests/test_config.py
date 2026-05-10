@@ -11,14 +11,16 @@ def test_get_config_schema_lists_v01_fields(client: TestClient) -> None:
     body = response.json()
     assert body["component"] == "memory"
     keys = {f["key"] for f in body["fields"]}
-    assert keys == {"port", "logLevel", "maxConversations", "maxMessagesPerConversation"}
+    # `port` is no longer here — owned by the watchdog topology via
+    # EUGENE_PLEXUS_MEM_BIND_PORT.
+    assert keys == {"logLevel", "maxConversations", "maxMessagesPerConversation"}
 
 
 def test_get_config_returns_defaults_on_first_run(client: TestClient) -> None:
     response = client.get("/v1/config")
     assert response.status_code == 200
     body = response.json()
-    assert body["port"] == 8083
+    assert "port" not in body
     assert body["logLevel"] == "INFO"
     assert body["maxConversations"] == 1000
     assert body["maxMessagesPerConversation"] == 10000
@@ -30,7 +32,7 @@ def test_patch_config_validates_per_field(client: TestClient) -> None:
         json={
             "maxConversations": 500,  # valid, hot-swappable
             "maxMessagesPerConversation": 50,  # valid, hot-swappable
-            "port": 70000,  # invalid: > 65535
+            "port": 70000,  # `port` is no longer a config field; rejected as unknown
         },
     )
     assert response.status_code == 200
@@ -38,17 +40,18 @@ def test_patch_config_validates_per_field(client: TestClient) -> None:
     assert set(body["applied"]) == {"maxConversations", "maxMessagesPerConversation"}
     rejected = {r["key"] for r in body["rejected"]}
     assert rejected == {"port"}
-    # Neither applied field requires restart, and the rejected one was never staged.
     assert body["requiresRestart"] is False
 
 
-def test_patch_config_marks_restart_required_on_port(client: TestClient) -> None:
+def test_patch_config_rejects_port_as_unknown_field(client: TestClient) -> None:
+    """Confirms `port` is gone from the config schema — it's the watchdog's
+    job now. Any operator still sending it gets a clean rejection."""
     response = client.patch("/v1/config", json={"port": 9000})
     assert response.status_code == 200
     body = response.json()
-    assert body["applied"] == ["port"]
-    assert body["requiresRestart"] is True
-    assert body["pendingRestart"] == ["port"]
+    assert body["applied"] == []
+    assert body["rejected"][0]["key"] == "port"
+    assert "unknown field" in body["rejected"][0]["message"]
 
 
 def test_patch_config_rejects_unknown_field(client: TestClient) -> None:

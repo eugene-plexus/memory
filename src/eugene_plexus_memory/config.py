@@ -39,22 +39,11 @@ CATEGORY_LABELS: dict[str, str] = {
 # Schema for the memory component's config surface. v0.1 is intentionally
 # minimal — when the in-process store is replaced with real persistence,
 # this is where DB connection strings, retention windows, etc. land.
+# `port` used to live in this list. It moved out: ports are owned by
+# the watchdog topology now, passed to spawned children via
+# EUGENE_PLEXUS_MEM_BIND_PORT. Standalone launches fall back to the
+# default in `__main__.py`.
 FIELDS: list[ConfigField] = [
-    ConfigField(
-        key="port",
-        label="HTTP port",
-        description=(
-            "Port the *memory service itself* listens on. The "
-            "orchestrator connects to this port to store and retrieve "
-            "conversation history. v0.1 default is 8083."
-        ),
-        category="network",
-        valueType=ConfigValueType.integer,
-        default=8083,
-        minimum=1,
-        maximum=65535,
-        requiresRestart=True,
-    ),
     ConfigField(
         key="logLevel",
         label="Log level",

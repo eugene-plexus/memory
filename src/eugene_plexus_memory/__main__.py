@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
+import os
+
 import uvicorn
 
 from .app import create_app
 from .config import ConfigStore
 from .settings import load_settings
 
+# Default bind port for standalone launch. The watchdog overrides via
+# EUGENE_PLEXUS_MEM_BIND_PORT.
+_DEFAULT_PORT = 8083
+
 
 def main() -> None:
     settings = load_settings()
 
-    # Read the persisted port from config without needing the FastAPI lifespan.
     bootstrap_store = ConfigStore(settings.config_file)
-    bootstrap_store.load()
-    port = int(bootstrap_store.get("port") or 8083)
+    if not settings.safe_mode:
+        bootstrap_store.load()
+
+    env_port = os.environ.get("EUGENE_PLEXUS_MEM_BIND_PORT")
+    port = int(env_port) if env_port else _DEFAULT_PORT
 
     app = create_app(settings)
     uvicorn.run(
