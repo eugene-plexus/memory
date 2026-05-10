@@ -35,8 +35,17 @@ def build_store(config: ConfigStore) -> InProcessStore:
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     config_store = ConfigStore(settings.config_file)
-    config_store.load()
+    if settings.safe_mode:
+        log.warning(
+            "starting in SAFE MODE (EUGENE_PLEXUS_MEM_SAFE_MODE=1); ignoring "
+            "%s and running on defaults. Fix config via /v1/config, then "
+            "restart without the env var.",
+            settings.config_file,
+        )
+    else:
+        config_store.load()
     app.state.config_store = config_store
+    app.state.safe_mode = settings.safe_mode
 
     # The in-process store can't actually fail to construct in v0.1, but the
     # try/except matches the project-wide pattern (see

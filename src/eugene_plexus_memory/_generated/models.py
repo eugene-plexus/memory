@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class Role(StrEnum):
@@ -19,6 +19,45 @@ class Role(StrEnum):
     user = 'user'
     assistant = 'assistant'
     hemisphere = 'hemisphere'
+
+
+class Message(BaseModel):
+    """
+    A single message in an Eugene Plexus conversation. The shape is
+    deliberately close to the OpenAI / Anthropic chat message format so
+    that adapters don't have to re-shape on every hop, but `role` includes
+    `hemisphere` for messages emitted by one of the parallel drivers
+    during a bicameral pass (visible to corpus callosum and UI debug
+    views, not normally to the end user).
+
+    """
+
+    role: Role
+    content: str = Field(
+        ...,
+        description='Message text. v0.1 is text-only; multimodal extensions deferred.',
+    )
+    driverName: str | None = Field(
+        None,
+        description='When `role == "hemisphere"`, the operator-supplied name of\nthe driver that produced this message (e.g. `"left"`,\n`"right"`, or any free-form label set by the orchestrator\'s\n`drivers` config). Omitted otherwise. Identity is owned by\nthe orchestrator\'s topology config — drivers themselves do\nnot know their position in the pair.\n',
+    )
+    timestamp: AwareDatetime | None = Field(
+        None, description='When the message was produced. Server-assigned if omitted.'
+    )
+    passIndex: int | None = Field(
+        None,
+        description='Zero-based index of the bicameral pass that produced this message.\nPass 0 is the initial hemisphere response; subsequent passes are\nre-prompts after corpus-callosum disagreement.\n',
+        ge=0,
+    )
+
+
+class Conversation(BaseModel):
+    """
+    An ordered list of messages constituting a conversation history.
+    """
+
+    id: UUID | None = Field(None, description='Server-assigned conversation id.')
+    messages: list[Message]
 
 
 class NTState(BaseModel):
@@ -67,13 +106,25 @@ class NTState(BaseModel):
     )
 
 
-class Hemisphere(StrEnum):
+class DriverEntry(BaseModel):
     """
-    Which hemisphere of the bicameral pair.
+    One operator-configured hemisphere-driver in the orchestrator's
+    topology. The orchestrator owns the `name` (free-form, used for
+    labelling messages and UI tabs); drivers themselves are anonymous
+    and report only their backend / model identity. v0.1 expects two
+    entries; v0.2+ generalizes to N (with backup/failover semantics
+    layered on top).
+
     """
 
-    left = 'left'
-    right = 'right'
+    name: str = Field(
+        ...,
+        description='Operator-supplied label (e.g. `"left"`, `"right"`, or any\nfree-form string). Stamped onto every message this driver\nproduces and surfaced in the UI as the tab/column label.\n',
+        min_length=1,
+    )
+    url: AnyUrl = Field(
+        ..., description="Base URL where the driver's HTTP API is reachable."
+    )
 
 
 class BackendKind(StrEnum):
@@ -134,6 +185,10 @@ class Health(BaseModel):
     component: str | None = Field(
         None, description='Component identifier (e.g. `"hemisphere-driver"`).'
     )
+    safeMode: bool | None = Field(
+        False,
+        description="True when the component was started with the watchdog's\nsafe-mode env var set\n(`EUGENE_PLEXUS_<KIND>_SAFE_MODE=1`) and is therefore\nrunning on built-in defaults instead of its persisted\nconfig. Components in safe mode are reachable for config\nediting (`PATCH /v1/config` writes to disk normally) but\nshould be considered non-functional for their primary\npurpose until restarted without the flag. `status` is\nalso reported as `degraded` while safe mode is in effect.\n",
+    )
     details: dict[str, Any] | None = Field(
         None, description='Optional component-specific health detail.'
     )
@@ -155,13 +210,14 @@ class ConfigValueType(StrEnum):
     file_path = 'file_path'
     url = 'url'
     duration = 'duration'
+    driver_list = 'driver_list'
 
 
 class ConfigFieldShowWhen(BaseModel):
     """
     Predicate over another `ConfigField`'s current value. The UI
     renders the field this is attached to only when the named field
-    equals the given value.
+    equals the given value (or matches one entry in the given list).
 
     """
 
@@ -171,7 +227,7 @@ class ConfigFieldShowWhen(BaseModel):
     )
     equals: Any = Field(
         ...,
-        description="Value the named field must equal for this field to render.\nUntyped — JSON value matching the referenced field's\n`valueType`. Only literal equality is supported in v0.1;\nricher predicates (`oneOf`, `not`, etc.) deferred until a\nreal use case appears.\n",
+        description="Value the named field must equal for this field to render.\nUntyped — when scalar, matches by literal equality against\nthe referenced field's `valueType`. When an array, matches\nif the referenced field's current value equals any entry\n(set-membership). Use the array form for a field that\napplies to multiple entries of an enum (e.g. an `apiKey`\nfield shared across several OpenAI-compatible providers).\n",
     )
 
 
@@ -286,43 +342,32 @@ class ConfigTestResult(BaseModel):
     )
 
 
-class Message(BaseModel):
+class RestartResult(BaseModel):
     """
-    A single message in an Eugene Plexus conversation. The shape is
-    deliberately close to the OpenAI / Anthropic chat message format so
-    that adapters don't have to re-shape on every hop, but `role` includes
-    `hemisphere` for messages emitted by an individual hemisphere during
-    the bicameral pass (visible to corpus callosum and UI debug views,
-    not normally to the end user).
+    Acknowledgement returned by `POST /v1/admin/restart`. The
+    component schedules its own process exit shortly after returning
+    this response (typically a few hundred ms — long enough for the
+    HTTP response to flush). The component does NOT bring itself
+    back up; a process supervisor (systemd, docker-compose, the
+    deploy launcher, etc.) is expected to relaunch it. In v0.1
+    personal-use deploys without a supervisor, the operator
+    relaunches manually.
 
     """
 
-    role: Role
-    content: str = Field(
+    scheduled: bool = Field(
         ...,
-        description='Message text. v0.1 is text-only; multimodal extensions deferred.',
+        description='True if the component accepted the restart and an exit is\nqueued. Always true in v0.1 — the endpoint has no reason to\nrefuse — but typed as a boolean so future versions can gate\non (e.g.) an in-flight long-running operation.\n',
     )
-    hemisphere: Hemisphere | None = Field(
-        None,
-        description='When `role == "hemisphere"`, identifies which hemisphere\nproduced this message. Omitted otherwise.\n',
-    )
-    timestamp: AwareDatetime | None = Field(
-        None, description='When the message was produced. Server-assigned if omitted.'
-    )
-    passIndex: int | None = Field(
-        None,
-        description='Zero-based index of the bicameral pass that produced this message.\nPass 0 is the initial hemisphere response; subsequent passes are\nre-prompts after corpus-callosum disagreement.\n',
+    delayMs: int = Field(
+        ...,
+        description='How long the component intends to wait before calling exit,\nmeasured from the moment the response is sent. Lets clients\ntime their UI ("restarting in 0.5s…") and decide when to\nstart polling `/healthz` for the relaunched process.\n',
         ge=0,
     )
-
-
-class Conversation(BaseModel):
-    """
-    An ordered list of messages constituting a conversation history.
-    """
-
-    id: UUID | None = Field(None, description='Server-assigned conversation id.')
-    messages: list[Message]
+    message: str | None = Field(
+        None,
+        description='Optional human-readable note (e.g. "logs flushed, exiting\nnow"). UI may display this in the restart-progress dialog.\n',
+    )
 
 
 class ConfigField(BaseModel):
@@ -350,6 +395,10 @@ class ConfigField(BaseModel):
     )
     enumValues: list[str] | None = Field(
         None, description='Allowed values when `valueType == enum`.'
+    )
+    enumLabels: list[str] | None = Field(
+        None,
+        description='Optional human-readable display labels paired one-to-one\nwith `enumValues`. UIs that render an enum as a dropdown\nshould show `enumLabels[i]` while still submitting\n`enumValues[i]` as the saved value. When omitted (or\nshorter than `enumValues`), UIs fall back to the raw\nvalue as the label. Useful where the stored key is\nmachine-friendly but the user-facing label isn\'t —\ne.g. `claude_subscription` saved, "Claude (Pro/Max)"\nshown.\n',
     )
     sensitive: bool | None = Field(
         False,

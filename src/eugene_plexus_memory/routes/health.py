@@ -18,12 +18,14 @@ async def healthz(request: Request) -> Health:
     # serve conversation data until the operator fixes config.
     store = getattr(request.app.state, "store", None)
     store_error = getattr(request.app.state, "store_error", None)
+    safe_mode = bool(getattr(request.app.state, "safe_mode", False))
 
-    if store is None:
+    if safe_mode or store is None:
         return Health(
             status=Status.degraded,
             version=__version__,
             component="memory",
+            safeMode=safe_mode,
             details={"store_error": store_error},
         )
 
@@ -31,4 +33,5 @@ async def healthz(request: Request) -> Health:
         status=Status.ok,
         version=__version__,
         component="memory",
+        safeMode=False,
     )
