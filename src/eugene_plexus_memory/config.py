@@ -42,8 +42,12 @@ CATEGORY_LABELS: dict[str, str] = {
 FIELDS: list[ConfigField] = [
     ConfigField(
         key="port",
-        label="HTTP Port",
-        description="Port to listen on.",
+        label="HTTP port",
+        description=(
+            "Port the *memory service itself* listens on. The "
+            "orchestrator connects to this port to store and retrieve "
+            "conversation history. v0.1 default is 8083."
+        ),
         category="network",
         valueType=ConfigValueType.integer,
         default=8083,
@@ -53,10 +57,12 @@ FIELDS: list[ConfigField] = [
     ),
     ConfigField(
         key="logLevel",
-        label="Log Level",
+        label="Log level",
         description=(
-            "Logging verbosity. Read by uvicorn at startup; restart required "
-            "for the new level to take effect."
+            "How chatty the memory service's terminal output is. "
+            "`DEBUG` prints every store/fetch operation; `INFO` is the "
+            "normal level; `WARNING` and `ERROR` go progressively "
+            "quieter."
         ),
         category="logging",
         valueType=ConfigValueType.enum,
@@ -68,9 +74,11 @@ FIELDS: list[ConfigField] = [
         key="maxConversations",
         label="Max conversations",
         description=(
-            "Soft cap on how many conversations the in-process store keeps. "
-            "When exceeded, the oldest conversations are dropped. Defensive "
-            "ceiling against unbounded memory growth in v0.1's stub backend."
+            "Upper limit on how many conversations the v0.1 in-process "
+            "store will keep at once. When exceeded, the oldest "
+            "conversation is dropped to make room. Acts as a safety "
+            "valve against unbounded RAM growth — pick something "
+            "comfortably above how many you expect to keep around."
         ),
         category="limits",
         valueType=ConfigValueType.integer,
@@ -79,10 +87,13 @@ FIELDS: list[ConfigField] = [
     ),
     ConfigField(
         key="maxMessagesPerConversation",
-        label="Max messages / conversation",
+        label="Max messages per conversation",
         description=(
-            "Soft cap on messages per conversation. When exceeded, the oldest "
-            "messages in that conversation are dropped on append."
+            "Upper limit on messages within a single conversation. "
+            "When exceeded, the oldest messages in that conversation "
+            "are dropped on append (the user's first turns disappear "
+            "first). 10,000 is roughly the size of a long working "
+            "session; raise it for genuinely long-running conversations."
         ),
         category="limits",
         valueType=ConfigValueType.integer,
