@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -15,7 +16,14 @@ from eugene_plexus_memory.settings import Settings
 
 @pytest.fixture
 def settings(tmp_path: Path) -> Settings:
-    return Settings(config_file=tmp_path / "config.yaml")
+    # Pre-seed config so localSqlitePath lands inside tmp_path — otherwise
+    # the default `memory.sqlite3` would be created relative to CWD and
+    # leak between test runs.
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"localSqlitePath": str(tmp_path / "memory.sqlite3")})
+    )
+    return Settings(config_file=config_path)
 
 
 @pytest.fixture

@@ -10,27 +10,17 @@ from fastapi import Depends, FastAPI
 
 from . import __version__
 from .auth_state import load_auth_state
+from .backends import Backend, build_backend
 from .config import ConfigStore
 from .dependencies import require_authorized, require_operator
 from .routes import config as config_routes
 from .routes import conversations as conversations_routes
 from .routes import health as health_routes
+from .routes import persons as persons_routes
+from .routes import search as search_routes
 from .settings import Settings, load_settings
-from .store import InProcessStore
 
 log = logging.getLogger(__name__)
-
-
-def build_store(config: ConfigStore) -> InProcessStore:
-    """Construct the conversation store from the runtime config."""
-
-    def limits() -> tuple[int, int]:
-        return (
-            int(config.get("maxConversations") or 1000),
-            int(config.get("maxMessagesPerConversation") or 10000),
-        )
-
-    return InProcessStore(limits=limits)
 
 
 @asynccontextmanager
@@ -60,27 +50,47 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             master_key_b64=settings.master_key,
         )
 
-    # The in-process store can't actually fail to construct in v0.1, but the
-    # try/except matches the project-wide pattern (see
-    # `feedback_degraded_mode_required.md`): a future durable backend (DB,
-    # Redis, etc.) MUST come up far enough to serve config endpoints even
-    # when its storage is unreachable so the operator can fix the config
-    # through the UI rather than SSH-and-edit. Routes check `app.state.store`
-    # and return 503 with an actionable message when it's None.
-    try:
-        app.state.store = build_store(config_store)
-        app.state.store_error = None
-        log.info("conversation store ready (in-process)")
-    except Exception as e:
-        app.state.store = None
-        app.state.store_error = str(e)
-        log.error(
-            "store initialization failed (%s); memory running in degraded "
-            "mode — fix config via /v1/config and restart",
-            e,
-        )
+    # Build the storage backend selected in config. Safe mode forces
+    # `in_process` regardless of config to avoid touching disk —
+    # honors the recovery-flow contract (operator can fix a broken
+    # localSqlitePath via /v1/config without the corrupt path blocking
+    # startup).
+    #
+    # Routes check `app.state.store` and return 503 with an actionable
+    # message when it's None — the standard degraded-mode shape from
+    # `feedback_degraded_mode_required.md`.
+    backend: Backend | None = None
+    backend_error: str | None = None
+    if settings.safe_mode:
+        # Force in_process; do not consult the persisted config.
+        from .backends.in_process import InProcessBackend
 
-    yield
+        backend = InProcessBackend.from_config(lambda key: None)
+        log.info("safe mode active; using in_process backend (no on-disk reads)")
+    else:
+        try:
+            backend = build_backend(config_store)
+            log.info("memory backend ready (%s)", config_store.get("backend") or "local_sqlite")
+        except Exception as e:
+            backend_error = str(e)
+            log.error(
+                "backend initialization failed (%s); memory running in degraded "
+                "mode — fix config via /v1/config and restart",
+                e,
+            )
+
+    if not hasattr(app.state, "store"):
+        app.state.store = backend
+        app.state.store_error = backend_error
+        owns_store = backend is not None
+    else:
+        owns_store = False
+
+    try:
+        yield
+    finally:
+        if owns_store and app.state.store is not None:
+            app.state.store.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -89,7 +99,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Eugene Plexus — memory",
-        description="Conversation history storage. v0.1 ships an in-process stub.",
+        description=(
+            "Conversation history + per-person retrieval. v0.2 ships the "
+            "`local_sqlite` backend; `in_process` available for tests."
+        ),
         version=__version__,
         lifespan=_lifespan,
     )
@@ -103,10 +116,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # compromised peer can't reconfigure the memory component.
     app.include_router(config_routes.router, dependencies=[Depends(require_operator)])
 
-    # Conversations: the orchestrator (service:orchestrator) writes
-    # turns; operators may read them through the UI for debugging.
-    app.include_router(
-        conversations_routes.router, dependencies=[Depends(require_authorized)]
-    )
+    # Conversations + per-person retrieval + search: the orchestrator
+    # (service:orchestrator) writes/reads; operators may read through the
+    # UI for debugging.
+    authorized = [Depends(require_authorized)]
+    app.include_router(conversations_routes.router, dependencies=authorized)
+    app.include_router(persons_routes.router, dependencies=authorized)
+    app.include_router(search_routes.router, dependencies=authorized)
 
     return app
