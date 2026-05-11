@@ -37,6 +37,19 @@ class Settings(BaseSettings):
     but the contract is honored uniformly so the operator's mental model
     of safe mode is the same across every component."""
 
+    auth_signing_key: str | None = None
+    """Base64-encoded 32-byte HMAC signing key, supplied by the watchdog at
+    spawn time (EUGENE_PLEXUS_MEM_AUTH_SIGNING_KEY). When absent the
+    component runs unauthenticated — dev / standalone path only."""
+
+    service_token: str | None = None
+    """Long-lived service JWT (EUGENE_PLEXUS_MEM_SERVICE_TOKEN). Not
+    consumed by v0.1's in-process store; captured for symmetry."""
+
+    master_key: str | None = None
+    """Base64-encoded 32-byte secretbox key (EUGENE_PLEXUS_MEM_MASTER_KEY).
+    Not used in v0.1 — conversation contents aren't encrypted at rest."""
+
 
 def load_settings() -> Settings:
     return Settings()

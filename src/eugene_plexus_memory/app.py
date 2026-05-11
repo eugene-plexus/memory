@@ -6,10 +6,12 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from . import __version__
+from .auth_state import load_auth_state
 from .config import ConfigStore
+from .dependencies import require_authorized, require_operator
 from .routes import config as config_routes
 from .routes import conversations as conversations_routes
 from .routes import health as health_routes
@@ -47,6 +49,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.config_store = config_store
     app.state.safe_mode = settings.safe_mode
 
+    # v0.2 auth state. Tests can pre-populate `app.state.auth_state` to
+    # exercise authed paths; the default lifespan build reads env vars
+    # via Settings and produces an auth-disabled state when the watchdog
+    # didn't supply AUTH_SIGNING_KEY.
+    if not hasattr(app.state, "auth_state"):
+        app.state.auth_state = load_auth_state(
+            signing_key_b64=settings.auth_signing_key,
+            service_token=settings.service_token,
+            master_key_b64=settings.master_key,
+        )
+
     # The in-process store can't actually fail to construct in v0.1, but the
     # try/except matches the project-wide pattern (see
     # `feedback_degraded_mode_required.md`): a future durable backend (DB,
@@ -82,8 +95,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
 
+    # Health stays unauthenticated — supervisors and load balancers need
+    # to probe it without holding credentials.
     app.include_router(health_routes.router)
-    app.include_router(config_routes.router)
-    app.include_router(conversations_routes.router)
+
+    # Config edits are operator-only — service tokens are rejected so a
+    # compromised peer can't reconfigure the memory component.
+    app.include_router(config_routes.router, dependencies=[Depends(require_operator)])
+
+    # Conversations: the orchestrator (service:orchestrator) writes
+    # turns; operators may read them through the UI for debugging.
+    app.include_router(
+        conversations_routes.router, dependencies=[Depends(require_authorized)]
+    )
 
     return app
