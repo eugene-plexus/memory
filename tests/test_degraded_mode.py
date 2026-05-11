@@ -1,10 +1,11 @@
 """Tests for degraded-mode startup.
 
-v0.1's in-process store can't realistically fail at construction, but the
-project-wide rule (`feedback_degraded_mode_required.md`) is that a future
-durable backend MUST come up far enough to serve config endpoints when
-storage is unavailable. We exercise the contract by monkeypatching
-`build_store` to raise — the same shape any future failure would take.
+The project-wide rule (`feedback_degraded_mode_required.md`) is that a
+durable backend MUST come up far enough to serve config endpoints even
+when storage initialization fails. v0.2's `local_sqlite` can fail in
+realistic ways (bad path, permissions, corrupt file). We exercise the
+contract by monkeypatching `build_backend` to raise — the same shape
+any real backend-init failure would take.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ def degraded_client(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> Test
     def _explode(*_: object, **__: object) -> object:
         raise RuntimeError("storage backend unreachable")
 
-    monkeypatch.setattr(app_module, "build_store", _explode)
+    monkeypatch.setattr(app_module, "build_backend", _explode)
     app = create_app(settings=settings)
     return TestClient(app)
 

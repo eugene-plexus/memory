@@ -81,6 +81,8 @@ ignore = []
 # idiom for dependency injection but trips ruff's "no function calls in
 # defaults" rule. Allow it only in the dependency module that defines them.
 "src/eugene_plexus_memory/dependencies.py" = ["B008"]
+# Same FastAPI-idiom story: Query() in argument defaults.
+"src/eugene_plexus_memory/routes/persons.py" = ["B008"]
 
 # -----------------------------------------------------------------------------
 # Mypy

@@ -22,6 +22,7 @@ from ._generated.models import (
     ConfigDocument,
     ConfigField,
     ConfigFieldError,
+    ConfigFieldShowWhen,
     ConfigSchema,
     ConfigUpdateRequest,
     ConfigUpdateResult,
@@ -31,6 +32,8 @@ from ._generated.models import (
 REDACTED = "<redacted>"
 
 CATEGORY_LABELS: dict[str, str] = {
+    "backend": "Storage Backend",
+    "embeddings": "Embeddings",
     "network": "Network",
     "logging": "Logging",
     "limits": "Limits",
@@ -44,6 +47,60 @@ CATEGORY_LABELS: dict[str, str] = {
 # EUGENE_PLEXUS_MEM_BIND_PORT. Standalone launches fall back to the
 # default in `__main__.py`.
 FIELDS: list[ConfigField] = [
+    ConfigField(
+        key="backend",
+        label="Storage backend",
+        description=(
+            "Which storage backend the memory component uses. "
+            "`local_sqlite` (the v0.2 default) stores conversations in a "
+            "SQLite file on disk and supports per-person retrieval. "
+            "`in_process` is the v0.1 in-memory store — useful for tests "
+            "or transient dev runs but contents are lost on restart. "
+            "Future versions add `mem0`, `holographic`, `obsidian` and "
+            "others as drop-in adapters."
+        ),
+        category="backend",
+        valueType=ConfigValueType.enum,
+        default="local_sqlite",
+        enumValues=["local_sqlite", "in_process"],
+        requiresRestart=True,
+    ),
+    ConfigField(
+        key="localSqlitePath",
+        label="SQLite database path",
+        description=(
+            "Filesystem path of the `local_sqlite` backend's database "
+            "file. Defaults to `memory.sqlite3` next to the memory "
+            "component's config file. Use an absolute path if you want "
+            "the database somewhere else; the parent directory is "
+            "created automatically. Only consulted when "
+            "`backend: local_sqlite`."
+        ),
+        category="backend",
+        valueType=ConfigValueType.file_path,
+        default="memory.sqlite3",
+        requiresRestart=True,
+        showWhen=ConfigFieldShowWhen(key="backend", equals="local_sqlite"),
+    ),
+    ConfigField(
+        key="embeddingSource",
+        label="Embedding source",
+        description=(
+            "Where embeddings come from when memory search is wired. "
+            "`local` runs sentence-transformers offline (~100MB model "
+            "download on first install). `api` calls a vendor (OpenAI / "
+            "Voyage / Cohere) — requires network and a vendor key. "
+            "Reserved for the v0.2.x follow-on that wires `POST "
+            "/v1/memory/search`; in this build the field is recorded "
+            "but search returns 503 regardless."
+        ),
+        category="embeddings",
+        valueType=ConfigValueType.enum,
+        default="local",
+        enumValues=["local", "api"],
+        requiresRestart=True,
+        showWhen=ConfigFieldShowWhen(key="backend", equals="local_sqlite"),
+    ),
     ConfigField(
         key="logLevel",
         label="Log level",

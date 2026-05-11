@@ -5,15 +5,23 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_get_config_schema_lists_v01_fields(client: TestClient) -> None:
+def test_get_config_schema_lists_v02_fields(client: TestClient) -> None:
     response = client.get("/v1/config/schema")
     assert response.status_code == 200
     body = response.json()
     assert body["component"] == "memory"
     keys = {f["key"] for f in body["fields"]}
     # `port` is no longer here — owned by the watchdog topology via
-    # EUGENE_PLEXUS_MEM_BIND_PORT.
-    assert keys == {"logLevel", "maxConversations", "maxMessagesPerConversation"}
+    # EUGENE_PLEXUS_MEM_BIND_PORT. v0.2 adds backend / localSqlitePath /
+    # embeddingSource.
+    assert keys == {
+        "backend",
+        "localSqlitePath",
+        "embeddingSource",
+        "logLevel",
+        "maxConversations",
+        "maxMessagesPerConversation",
+    }
 
 
 def test_get_config_returns_defaults_on_first_run(client: TestClient) -> None:
@@ -21,6 +29,8 @@ def test_get_config_returns_defaults_on_first_run(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert "port" not in body
+    assert body["backend"] == "local_sqlite"
+    assert body["embeddingSource"] == "local"
     assert body["logLevel"] == "INFO"
     assert body["maxConversations"] == 1000
     assert body["maxMessagesPerConversation"] == 10000
