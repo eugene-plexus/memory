@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 import uvicorn
@@ -25,12 +26,23 @@ def main() -> None:
     env_port = os.environ.get("EUGENE_PLEXUS_MEM_BIND_PORT")
     port = int(env_port) if env_port else _DEFAULT_PORT
 
+    # See orchestrator/hemisphere-driver __main__ for the rationale.
+    # uvicorn only touches its own loggers; basicConfig with force=True
+    # gives our application warnings/info a timestamp + level + logger
+    # name so they're scannable in the watchdog's combined log.
+    log_level = str(bootstrap_store.get("logLevel") or "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+
     app = create_app(settings)
     uvicorn.run(
         app,
         host=settings.bind_host,
         port=port,
-        log_level=str(bootstrap_store.get("logLevel") or "INFO").lower(),
+        log_level=log_level.lower(),
     )
 
 
