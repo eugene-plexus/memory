@@ -1,8 +1,8 @@
 """Route-level tests for the v0.2 endpoints:
 
-  - GET /v1/memory/persons/{personId}/recent
-  - POST /v1/memory/search
-  - POST /v1/conversations/{conversationId}/messages with MemoryEntry vs bare Message
+- GET /v1/memory/persons/{personId}/recent
+- POST /v1/memory/search
+- POST /v1/conversations/{conversationId}/messages with MemoryEntry vs bare Message
 """
 
 from __future__ import annotations

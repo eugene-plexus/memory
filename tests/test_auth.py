@@ -78,9 +78,7 @@ def operator_token(signing_key: bytes) -> str:
 
 @pytest.fixture
 def orchestrator_service_token(signing_key: bytes) -> str:
-    return _issue(
-        signing_key=signing_key, sub="orchestrator", aud="service:orchestrator"
-    )
+    return _issue(signing_key=signing_key, sub="orchestrator", aud="service:orchestrator")
 
 
 # --------------------------------------------------------------------------- #
@@ -116,15 +114,11 @@ def test_missing_bearer_rejects_with_401(authed_client: TestClient) -> None:
 def test_wrong_signing_key_rejects(authed_client: TestClient) -> None:
     other = secrets.token_bytes(32)
     token = _issue(signing_key=other, sub="operator", aud="operator")
-    response = authed_client.get(
-        "/v1/config", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = authed_client.get("/v1/config", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 
 
-def test_expired_token_rejects(
-    authed_client: TestClient, signing_key: bytes
-) -> None:
+def test_expired_token_rejects(authed_client: TestClient, signing_key: bytes) -> None:
     expired = _issue(
         signing_key=signing_key,
         sub="operator",
@@ -132,9 +126,7 @@ def test_expired_token_rejects(
         ttl_seconds=-60,
         iat=int(time.time()) - 120,
     )
-    response = authed_client.get(
-        "/v1/config", headers={"Authorization": f"Bearer {expired}"}
-    )
+    response = authed_client.get("/v1/config", headers={"Authorization": f"Bearer {expired}"})
     assert response.status_code == 401
 
 
@@ -143,9 +135,7 @@ def test_expired_token_rejects(
 # --------------------------------------------------------------------------- #
 
 
-def test_operator_token_accepted_on_config(
-    authed_client: TestClient, operator_token: str
-) -> None:
+def test_operator_token_accepted_on_config(authed_client: TestClient, operator_token: str) -> None:
     response = authed_client.get(
         "/v1/config", headers={"Authorization": f"Bearer {operator_token}"}
     )
@@ -208,9 +198,7 @@ def test_service_token_accepted_on_conversations(
 def test_load_auth_state_disabled_when_no_signing_key() -> None:
     from eugene_plexus_memory.auth_state import load_auth_state
 
-    state = load_auth_state(
-        signing_key_b64=None, service_token=None, master_key_b64=None
-    )
+    state = load_auth_state(signing_key_b64=None, service_token=None, master_key_b64=None)
     assert state.auth_disabled is True
 
 

@@ -154,9 +154,7 @@ class LocalSqliteBackend:
             )
             return cur.rowcount > 0
 
-    def append(
-        self, *, conversation_id: UUID, entry: MemoryEntry
-    ) -> MemoryEntry | None:
+    def append(self, *, conversation_id: UUID, entry: MemoryEntry) -> MemoryEntry | None:
         stored = entry.model_copy(update={"conversationId": conversation_id})
         now_iso = datetime.now(UTC).isoformat()
 
@@ -270,9 +268,7 @@ class LocalSqliteBackend:
 
     def _evict_locked(self) -> None:
         max_conversations, _ = self._limits()
-        count = self._conn.execute(
-            "SELECT COUNT(*) FROM conversations"
-        ).fetchone()[0]
+        count = self._conn.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
         if count <= max_conversations:
             return
         to_drop = count - max_conversations

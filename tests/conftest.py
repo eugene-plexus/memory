@@ -20,9 +20,7 @@ def settings(tmp_path: Path) -> Settings:
     # the default `memory.sqlite3` would be created relative to CWD and
     # leak between test runs.
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        yaml.safe_dump({"localSqlitePath": str(tmp_path / "memory.sqlite3")})
-    )
+    config_path.write_text(yaml.safe_dump({"localSqlitePath": str(tmp_path / "memory.sqlite3")}))
     return Settings(config_file=config_path)
 
 

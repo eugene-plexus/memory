@@ -48,9 +48,7 @@ async def person_recent(
     fetching the full history.
     """
     store = _store_or_503(request)
-    result = store.person_recent(
-        person_id=person_id, limit=limit, conversation_id=conversation_id
-    )
+    result = store.person_recent(person_id=person_id, limit=limit, conversation_id=conversation_id)
     return {
         "personId": str(person_id),
         "turnCount": result.turn_count,

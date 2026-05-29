@@ -59,17 +59,13 @@ class InProcessBackend:
             entries = self._conversations.get(conversation_id)
             if entries is None:
                 return None
-            return Conversation(
-                id=conversation_id, messages=[_to_message(e) for e in entries]
-            )
+            return Conversation(id=conversation_id, messages=[_to_message(e) for e in entries])
 
     def delete_conversation(self, conversation_id: UUID) -> bool:
         with self._lock:
             return self._conversations.pop(conversation_id, None) is not None
 
-    def append(
-        self, *, conversation_id: UUID, entry: MemoryEntry
-    ) -> MemoryEntry | None:
+    def append(self, *, conversation_id: UUID, entry: MemoryEntry) -> MemoryEntry | None:
         with self._lock:
             entries = self._conversations.get(conversation_id)
             if entries is None:
@@ -151,9 +147,7 @@ def _to_message(entry: MemoryEntry) -> Message:
     )
 
 
-def _ensure_entry_fields(
-    entry: MemoryEntry, *, conversation_id: UUID
-) -> MemoryEntry:
+def _ensure_entry_fields(entry: MemoryEntry, *, conversation_id: UUID) -> MemoryEntry:
     """Stamp the URL-supplied conversation_id onto the entry.
 
     `entryId` / `personId` / `timestamp` are required on MemoryEntry
