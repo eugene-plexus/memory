@@ -1,5 +1,12 @@
 # eugene-plexus-memory
 
+> **Retired as of 2026-09-08.** Historical conversation storage from the former
+> consciousness framework; not part of the current inference control plane.
+> The documentation below is historical, not a current installation guide.
+> Its contracts were removed from current specs; retain the historical pin.
+> The repository remains unarchived on GitHub, but is not maintained as an active
+> component. See the [current project overview](https://github.com/eugene-plexus/specs#readme).
+
 Conversation history storage for [Eugene Plexus](https://github.com/eugene-plexus).
 
 ## What this is
